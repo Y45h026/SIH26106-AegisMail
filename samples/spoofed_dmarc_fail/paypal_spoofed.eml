@@ -1,0 +1,32 @@
+Delivered-To: student@college.edu
+Received: by 2002:a05:7000:1234:0:0:0:0 with SMTP id 987654321;
+    Wed, 04 Sep 2026 10:15:22 -0700 (PDT)
+Authentication-Results: mx.google.com;
+    spf=fail (google.com: domain of support@paypal.com does not designate 103.14.22.88 as permitted sender) smtp.mailfrom=support@paypal.com;
+    dmarc=fail (p=REJECT sp=REJECT dis=QUARANTINE) header.from=paypal.com
+Received: from mail.attacker-vps-hosting.net (unknown [103.14.22.88])
+    by mx.google.com with ESMTPS id zyxwvut98765.2.2026.09.04.10.15.22
+    for <student@college.edu>
+    (version=TLS1_2 cipher=ECDHE-RSA-AES128-GCM-SHA256 bits=128/128);
+    Wed, 04 Sep 2026 10:15:22 -0700 (PDT)
+Received: from [192.168.1.5] (localhost [127.0.0.1])
+    by mail.attacker-vps-hosting.net (Postfix) with ESMTP id 3A4B5C6D
+    for <student@college.edu>; Wed,  4 Sep 2026 17:15:20 +0000 (UTC)
+Date: Wed, 04 Sep 2026 17:15:20 +0000
+From: PayPal Support <support@paypal.com>
+To: student@college.edu
+Message-ID: <fake-id-9999@paypal.com>
+Subject: URGENT: Your account has been restricted
+X-Mailer: PHPMailer 6.1.5 (https://github.com/PHPMailer/PHPMailer)
+
+Dear Customer,
+
+We noticed suspicious activity on your account. To prevent unauthorized transactions, we have temporarily restricted your access.
+
+Please verify your identity immediately by clicking the link below:
+http://paypal-security-update-992.com/login/auth.php?token=88123
+
+If you do not verify within 24 hours, your account will be permanently suspended.
+
+Sincerely,
+PayPal Security Team
