@@ -52,6 +52,32 @@ TECH STACK:
 
 ---
 
+```text
+# 1. Clone the repository
+git clone https://github.com/Y45h026/SIH26106-AegisMail.git
+cd SIH26106-AegisMail
+
+# 2. Switch to your assigned feature branch:
+# Member 1 (Lead):
+git checkout feat/core-engine
+
+# Member 2 (Cybersecurity/Auth):
+git checkout feat/auth-forensics
+
+# Member 3 (Threat Intel/GeoIP):
+git checkout feat/threat-intel
+
+# Member 4 (Frontend UI):
+git checkout feat/frontend-ui
+
+# Member 5 (ML/Content Engine):
+git checkout feat/content-threat-engine
+
+# Member 6 (Forensic Reporting/PPT):
+git checkout feat/forensic-reporting
+
+```
+
 ### 👑 Member 1 (Team Leader): System Architect & Core Engine
 * **Branch:** `feat/core-engine`
 * **Focus:** EML MIME parser, reverse-hop path reconstruction logic, and FastAPI orchestrator.
@@ -244,3 +270,4 @@ MY SPECIFIC TASKS FOR TODAY:
 
 Please output the complete Python PDF generator script and the full markdown presentation deck.
 ```
+
