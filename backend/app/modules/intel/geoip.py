@@ -18,5 +18,19 @@ def lookup_ip(ip):
     print("ISP:", data.get("isp"))
 
 
+def get_coordinates(ips):
+    coordinates = []
+
+    for ip in ips:
+        url = f"http://ip-api.com/json/{ip}"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+
+        if data.get("status") == "success":
+            coordinates.append((data.get("lat"), data.get("lon")))
+
+    return coordinates
+
+
 if __name__ == "__main__":
     lookup_ip("8.8.8.8")
