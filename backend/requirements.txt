@@ -9,4 +9,5 @@ scikit-learn>=1.4.0
 networkx>=3.2.1
 reportlab>=4.1.0
 python-multipart>=0.0.9
-geoipv6>=0.1.0
+# MaxMind GeoIP client; supports both IPv4 and IPv6 lookups.
+geoip2>=4.8.0
