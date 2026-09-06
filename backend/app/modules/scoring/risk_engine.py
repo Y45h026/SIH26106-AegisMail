@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+SAFE_MAX_SCORE = 24
+RED_RISK_MIN_SCORE = 76
+
 
 def _failed(value: object) -> bool:
     return value is False or (isinstance(value, str) and value.lower().strip() == "fail")
@@ -13,14 +16,17 @@ def _enabled(signals: Mapping[str, Any], *names: str) -> bool:
     return any(bool(signals.get(name)) for name in names)
 
 
-def _category(score: int) -> str:
-    if score <= 25:
-        return "Legitimate"
+def _risk_band(score: int) -> tuple[str, str]:
+    """Return the analyst-facing category and dashboard color for a score."""
+    if score <= SAFE_MAX_SCORE:
+        return "Legitimate", "green"
     if score <= 65:
-        return "Suspicious"
+        return "Suspicious", "yellow"
+    if score < RED_RISK_MIN_SCORE:
+        return "High Risk", "orange"
     if score <= 85:
-        return "High Risk"
-    return "Critical Threat"
+        return "High Risk", "red"
+    return "Critical Threat", "red"
 
 
 def score_email_risk(
@@ -66,9 +72,13 @@ def score_email_risk(
 
     raw_score = sum(factor["points"] for factor in factors)
     score = max(0, min(100, raw_score))
+    category, color = _risk_band(score)
     return {
         "score": score,
-        "category": _category(score),
+        "category": category,
+        "color": color,
+        "is_safe": score <= SAFE_MAX_SCORE,
+        "is_red_risk": score >= RED_RISK_MIN_SCORE,
         "raw_score": raw_score,
         "factors": factors,
         "factor_count": len(factors),
