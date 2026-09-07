@@ -36,11 +36,6 @@ def render_hop_path_map(coordinates: Sequence[Coordinate]) -> None:
     if not distinct_coordinates:
         st.info("No relay coordinates are available yet.")
         return
-    if len(distinct_coordinates) == 1:
-        latitude, longitude = distinct_coordinates[0]
-        st.info(f"One distinct public relay location is available: {latitude:.4f}, {longitude:.4f}. The full hop sequence remains available below.")
-        return
-
     try:
         import pydeck as pdk
     except ImportError:
@@ -78,7 +73,7 @@ def render_hop_path_map(coordinates: Sequence[Coordinate]) -> None:
             "ScatterplotLayer",
             points,
             get_position="position",
-            get_radius=35000,
+            get_radius=20000 if len(points) == 1 else 35000,
             get_fill_color="fill_color",
             get_line_color=[235, 248, 255],
             line_width_min_pixels=1,
@@ -114,7 +109,7 @@ def render_hop_path_map(coordinates: Sequence[Coordinate]) -> None:
         initial_view_state=pdk.ViewState(
             latitude=center_latitude,
             longitude=center_longitude,
-            zoom=2.3,
+            zoom=5.0 if len(points) == 1 else 2.3,
             pitch=20,
         ),
         layers=layers,
