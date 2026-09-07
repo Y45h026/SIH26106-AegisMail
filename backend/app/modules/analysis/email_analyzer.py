@@ -11,14 +11,17 @@ from app.modules.content.homoglyph import analyze_sender_domain
 from app.modules.content.nlp_intent import analyze_email_intent
 from app.modules.hops.hop_tracer import trace_hops
 from app.modules.intel.geoip import lookup_ip
+from app.modules.intel.domain_age import lookup_domain_age
 from app.modules.parser.eml_parser import parse_eml
 from app.modules.scoring.risk_engine import score_email_risk
 
 
 def analyze_email(
-    eml_file_path: str | Path,
+    eml_source: str | Path | bytes | bytearray,
     *,
+    filename: str | None = None,
     enrich_hops: bool = False,
+    enrich_domain: bool = False,
     do_dns_lookup: bool = False,
     do_dkim_crypto: bool = False,
 ) -> dict[str, Any]:
@@ -27,13 +30,24 @@ def analyze_email(
     Network-based checks are disabled by default. Set ``enrich_hops`` to add
     third-party GeoIP/ISP data and the other flags for live DNS/DKIM checks.
     """
-    path = Path(eml_file_path)
-    if not path.is_file():
-        raise FileNotFoundError(f"EML file not found: {path}")
-    parsed = parse_eml(path)
-    authentication = verify_email(path, do_dns_lookup=do_dns_lookup, do_dkim_crypto=do_dkim_crypto)
-    hop_trace = trace_hops(path)
+    if isinstance(eml_source, (str, Path)):
+        path = Path(eml_source)
+        if not path.is_file():
+            raise FileNotFoundError(f"EML file not found: {path}")
+        source = path
+        evidence_filename = filename or path.name
+    elif isinstance(eml_source, (bytes, bytearray)):
+        source = bytes(eml_source)
+        evidence_filename = filename or "uploaded.eml"
+    else:
+        raise TypeError("eml_source must be a path or raw EML bytes")
+
+    parsed = parse_eml(source)
+    authentication = verify_email(source, do_dns_lookup=do_dns_lookup, do_dkim_crypto=do_dkim_crypto)
+    hop_trace = trace_hops(source)
     domain = analyze_sender_domain(parsed.from_.email or "")
+    domain_intelligence = lookup_domain_age(domain["domain"]) if enrich_domain else {"domain": domain["domain"], "status": "not_requested", "age_days": None}
+    domain = {**domain, **domain_intelligence}
     intent = analyze_email_intent(parsed.subject or "", parsed.plain_text_body or parsed.html_body or "")
     relay_hops = [_relay_hop(hop.model_dump(mode="json"), enrich_hops) for hop in hop_trace.hops]
     anomaly_ids = {finding.id for finding in authentication.anomalies}
@@ -57,7 +71,7 @@ def analyze_email(
     )
     return {
         "evidence": {
-            "filename": path.name,
+            "filename": evidence_filename,
             "sha256": parsed.sha256,
             "md5": parsed.md5,
             "size_bytes": parsed.size_bytes,
@@ -71,7 +85,9 @@ def analyze_email(
             "warnings": hop_trace.warnings,
         },
         "suspicious_flags": flags,
+        "domain_intelligence": domain_intelligence,
         "content_intent": intent,
+        "urls": parsed.urls,
         "risk_score": risk_score,
     }
 

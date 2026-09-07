@@ -4,18 +4,13 @@ from __future__ import annotations
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from typing import Any
 
-from app.modules.hops.hop_tracer import HopTrace, trace_hops
-from app.modules.parser.eml_parser import ParsedEmail, parse_eml
+from app.modules.analysis.email_analyzer import analyze_email
+from app.modules.reports.pdf_generator import generate_forensic_report
 
 MAX_EML_SIZE_BYTES = 25 * 1024 * 1024
-
-
-class AnalysisResponse(BaseModel):
-    filename: str
-    email: ParsedEmail
-    hop_trace: HopTrace
 
 
 app = FastAPI(title="AegisMail API", version="0.1.0")
@@ -33,9 +28,9 @@ async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/api/v1/analyze", response_model=AnalysisResponse)
-async def analyze_email(file: UploadFile = File(..., description="Raw RFC 5322 .eml email")) -> AnalysisResponse:
-    """Ingest an EML artifact without persisting or modifying the uploaded bytes."""
+@app.post("/api/v1/analyze")
+async def analyze_uploaded_email(file: UploadFile = File(..., description="Raw RFC 5322 .eml email")) -> dict[str, Any]:
+    """Analyze uploaded evidence without persisting or modifying the bytes."""
     filename = file.filename or "uploaded.eml"
     if not filename.lower().endswith(".eml"):
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only .eml uploads are accepted.")
@@ -46,6 +41,17 @@ async def analyze_email(file: UploadFile = File(..., description="Raw RFC 5322 .
     if len(raw) > MAX_EML_SIZE_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="EML file exceeds the 25 MiB limit.")
     try:
-        return AnalysisResponse(filename=filename, email=parse_eml(raw), hop_trace=trace_hops(raw))
+        return analyze_email(raw, filename=filename)
     except (TypeError, ValueError, OSError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Unable to analyze EML: {exc}") from exc
+
+
+@app.post("/api/v1/report")
+async def generate_report(analysis: dict[str, Any]) -> StreamingResponse:
+    """Create a downloadable PDF from an existing analysis response."""
+    try:
+        pdf = generate_forensic_report(analysis)
+        filename = analysis.get("evidence", {}).get("filename", "email").removesuffix(".eml")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid analysis report payload: {exc}") from exc
+    return StreamingResponse(iter([pdf]), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}_forensic_report.pdf"'})

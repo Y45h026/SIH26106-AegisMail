@@ -12,9 +12,11 @@ adding a routing dependency that isn't already part of the project.
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import Any
 
+import requests
 import streamlit as st
 
 from components.hop_map import render_hop_path_map
@@ -26,6 +28,7 @@ def html_block(raw: str) -> str:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+API_BASE_URL = os.getenv("AEGISMAIL_API_URL", "http://127.0.0.1:8000")
 
 SAMPLE_DIRECTORIES = {
     "legitimate": PROJECT_ROOT / "samples" / "legitimate",
@@ -526,6 +529,51 @@ def apply_uploaded_metadata(result: dict[str, Any], uploaded: Any) -> dict[str, 
         "filename": uploaded.name,
         "file_size": f"{len(raw) / 1024:.1f} KB",
         "sha256": hashlib.sha256(raw).hexdigest(),
+    }
+
+
+def request_backend_analysis(uploaded: Any) -> dict[str, Any]:
+    """Submit raw upload bytes to FastAPI and return the forensic result."""
+    response = requests.post(
+        f"{API_BASE_URL}/api/v1/analyze",
+        files={"file": (uploaded.name, uploaded.getvalue(), "message/rfc822")},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def request_forensic_report(analysis: dict[str, Any]) -> bytes:
+    """Request the PDF report for an already-computed backend analysis."""
+    response = requests.post(f"{API_BASE_URL}/api/v1/report", json=analysis, timeout=30)
+    response.raise_for_status()
+    return response.content
+
+
+def adapt_analysis_result(analysis: dict[str, Any]) -> dict[str, Any]:
+    """Adapt the stable API response to the dashboard presentation model."""
+    evidence, auth, risk, flags = (
+        analysis["evidence"], analysis["authentication"], analysis["risk_score"], analysis["suspicious_flags"]
+    )
+    severity = {"Legitimate": "LOW RISK", "Suspicious": "HIGH RISK", "High Risk": "HIGH RISK", "Critical Threat": "CRITICAL RISK"}[risk["category"]]
+    signals = [
+        {"label": protocol.upper(), "technical": f"{protocol.upper()} authentication", "status": "pass" if auth[protocol]["result"] == "pass" else "danger", "detail": auth[protocol]["detail"] or "No stamped result was found."}
+        for protocol in ("spf", "dkim", "dmarc")
+    ]
+    hops: list[dict[str, Any]] = []
+    for hop in analysis["relay_hops"]["hops"]:
+        for infrastructure in hop["infrastructure"] or [{"ip": None, "location": None, "isp": None}]:
+            location = infrastructure.get("location") or {}
+            hops.append({"sequence": hop["sequence"], "ip": infrastructure.get("ip") or "—", "host": hop.get("from_server") or hop.get("by_server") or "Unknown", "isp": infrastructure.get("isp") or "Not enriched", "country": location.get("country") or "Not enriched", "lat": location.get("latitude"), "lon": location.get("longitude"), "latency": "—"})
+    keywords = flags["wire_transfer_keywords"] + [finding["phrase"] for finding in analysis["content_intent"]["matched_indicators"]]
+    return {
+        "risk_score": risk["score"], "severity": severity,
+        "summary": f"{risk['category']}: {risk['factor_count']} explainable risk indicator(s) were identified.",
+        "signals": signals,
+        "filename": evidence["filename"], "file_size": f"{evidence['size_bytes'] / 1024:.1f} KB", "sha256": evidence["sha256"],
+        "raw_headers": "Raw header viewing is available in the original EML evidence file.", "hops": hops,
+        "urls": [{"url": url, "reputation": "Review", "reason": "Extracted from email evidence"} for url in analysis.get("urls", [])],
+        "keywords": list(dict.fromkeys(keywords)) or ["No suspicious content keywords found"], "analysis": analysis,
     }
 
 
@@ -2087,12 +2135,12 @@ def render_results(result: dict[str, Any]) -> None:
         ),
     )
 
-    render_hop_path_map(MOCK_HOP_COORDINATES)
+    coordinates = [(hop["lat"], hop["lon"]) for hop in result["hops"] if hop["lat"] is not None and hop["lon"] is not None]
+    render_hop_path_map(coordinates)
 
     st.caption(
         (
-            "Mock GeoIP relay path — replace `MOCK_HOP_COORDINATES` with "
-            "Member 3's ordered coordinate list when available."
+            "Route points appear when optional GeoIP enrichment is enabled in the backend."
         )
     )
 
@@ -2255,24 +2303,17 @@ def render_results(result: dict[str, Any]) -> None:
     )
 
     with export_col:
-        if st.button(
-            "Export Forensic Report",
-            type="primary",
-            use_container_width=True,
-        ):
-            st.info(
-                (
-                    "Report export will connect here when the reporting "
-                    "module is available."
-                )
-            )
+        if result.get("analysis") and st.button("Prepare Forensic Report", type="primary", use_container_width=True):
+            try:
+                st.session_state.report_pdf = request_forensic_report(result["analysis"])
+            except requests.RequestException as exc:
+                st.error(f"Report generation failed: {exc}")
+        if st.session_state.get("report_pdf"):
+            st.download_button("Download PDF Report", st.session_state.report_pdf, file_name="aegismail_forensic_report.pdf", mime="application/pdf", use_container_width=True)
 
     with note_col:
         st.caption(
-            (
-                "PDF generation is intentionally not implemented in the frontend; "
-                "it remains owned by the reporting module."
-            )
+            "PDF reports are generated from the analysis response and retain the evidence hashes."
         )
 
 
@@ -2383,24 +2424,14 @@ def render_upload_analyze() -> None:
         return
 
 
-    result = apply_uploaded_metadata(
-        build_demo_result(
-            st.session_state.profile
-        ),
-        uploaded,
-    )
-
-    if (
-        uploaded is not None
-        and st.session_state.last_action == "upload"
-    ):
-        st.info(
-            (
-                "Showing demo analysis output while the scoring backend is "
-                "connected. Chain-of-custody details below reflect your "
-                "uploaded file."
-            )
-        )
+    if uploaded is not None and st.session_state.last_action == "upload":
+        try:
+            result = adapt_analysis_result(request_backend_analysis(uploaded))
+        except requests.RequestException as exc:
+            st.error(f"Backend analysis failed: {exc}. Start FastAPI at {API_BASE_URL}.")
+            return
+    else:
+        result = build_demo_result(st.session_state.profile)
 
     render_results(result)
 
