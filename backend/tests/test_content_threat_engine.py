@@ -55,6 +55,28 @@ class RiskEngineTests(unittest.TestCase):
         self.assertEqual(score_email_risk(domain={"age_days": 10})["category"], "Legitimate")
         self.assertEqual(score_email_risk(authentication={"dmarc": "fail"}, domain={"age_days": 10})["category"], "Suspicious")
 
+    def test_safe_email_stays_below_green_threshold(self) -> None:
+        result = score_email_risk(
+            authentication={"dmarc": "pass", "spf": "pass"},
+            domain={"age_days": 365},
+            headers={"has_message_id": True, "reply_to_mismatch": False},
+            content={"urgency_deception_score": 0.0},
+            urls={"has_ip_based_url": False},
+        )
+        self.assertLess(result["score"], 25)
+        self.assertEqual(result["color"], "green")
+        self.assertTrue(result["is_safe"])
+
+    def test_correlated_phishing_signals_cross_red_threshold(self) -> None:
+        result = score_email_risk(
+            authentication={"dmarc": "fail", "spf": "fail"},
+            domain={"is_impersonation_suspected": True},
+            content={"urgency_deception_score": 0.9},
+        )
+        self.assertGreater(result["score"], 75)
+        self.assertEqual(result["color"], "red")
+        self.assertTrue(result["is_red_risk"])
+
 
 if __name__ == "__main__":
     unittest.main()
