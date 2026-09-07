@@ -29,8 +29,16 @@ def render_hop_path_map(coordinates: Sequence[Coordinate]) -> None:
     exact supplied order. The first coordinate is labelled "Origin" and the
     last "Destination"; anything in between is labelled by hop number.
     """
-    if not coordinates:
+    # Multiple mail relays can belong to the same provider/location. Plot one
+    # point per distinct location so overlapping markers do not masquerade as
+    # a large route node.
+    distinct_coordinates = list(dict.fromkeys(coordinates))
+    if not distinct_coordinates:
         st.info("No relay coordinates are available yet.")
+        return
+    if len(distinct_coordinates) == 1:
+        latitude, longitude = distinct_coordinates[0]
+        st.info(f"One distinct public relay location is available: {latitude:.4f}, {longitude:.4f}. The full hop sequence remains available below.")
         return
 
     try:
@@ -39,7 +47,7 @@ def render_hop_path_map(coordinates: Sequence[Coordinate]) -> None:
         st.error("Map support requires pydeck. Install dependencies from frontend/requirements.txt.")
         return
 
-    total = len(coordinates)
+    total = len(distinct_coordinates)
 
     def _label(index: int) -> str:
         if index == 1:
@@ -61,16 +69,16 @@ def render_hop_path_map(coordinates: Sequence[Coordinate]) -> None:
             "hop": _label(index),
             "fill_color": _color(index),
         }
-        for index, (latitude, longitude) in enumerate(coordinates, start=1)
+        for index, (latitude, longitude) in enumerate(distinct_coordinates, start=1)
     ]
-    center_latitude = sum(latitude for latitude, _ in coordinates) / len(coordinates)
-    center_longitude = sum(longitude for _, longitude in coordinates) / len(coordinates)
+    center_latitude = sum(latitude for latitude, _ in distinct_coordinates) / len(distinct_coordinates)
+    center_longitude = sum(longitude for _, longitude in distinct_coordinates) / len(distinct_coordinates)
     layers = [
         pdk.Layer(
             "ScatterplotLayer",
             points,
             get_position="position",
-            get_radius=125000,
+            get_radius=35000,
             get_fill_color="fill_color",
             get_line_color=[235, 248, 255],
             line_width_min_pixels=1,
@@ -106,7 +114,7 @@ def render_hop_path_map(coordinates: Sequence[Coordinate]) -> None:
         initial_view_state=pdk.ViewState(
             latitude=center_latitude,
             longitude=center_longitude,
-            zoom=2.3 if len(points) > 1 else 5,
+            zoom=2.3,
             pitch=20,
         ),
         layers=layers,

@@ -557,11 +557,17 @@ def adapt_analysis_result(analysis: dict[str, Any]) -> dict[str, Any]:
         analysis["evidence"], analysis["authentication"], analysis["risk_score"], analysis["suspicious_flags"]
     )
     severity = {"Legitimate": "LOW RISK", "Suspicious": "HIGH RISK", "High Risk": "HIGH RISK", "Critical Threat": "CRITICAL RISK"}[risk["category"]]
-    signals = [
-        {"label": protocol.upper(), "technical": f"{protocol.upper()} authentication", "status": "pass" if auth[protocol]["result"] == "pass" else "danger", "detail": auth[protocol]["detail"] or "No stamped result was found."}
+    auth_cards = [
+        (protocol.upper(), auth[protocol]["result"].upper(), _auth_summary(protocol, auth[protocol]["result"]))
         for protocol in ("spf", "dkim", "dmarc")
     ]
-    auth = [(protocol.upper(), auth[protocol]["result"].upper(), auth[protocol]["detail"] or "No stamped result was found.") for protocol in ("spf", "dkim", "dmarc")]
+    signals = [
+        {"label": factor["code"].replace("_", " ").title(), "technical": factor["category"].title(), "status": "danger", "detail": factor["description"]}
+        for factor in risk["factors"]
+    ] or [
+        {"label": protocol, "technical": f"{protocol} authentication", "status": "pass" if status == "PASS" else "danger", "detail": detail}
+        for protocol, status, detail in auth_cards
+    ]
     hops: list[dict[str, Any]] = []
     for hop in analysis["relay_hops"]["hops"]:
         for infrastructure in hop["infrastructure"] or [{"ip": None, "location": None, "isp": None}]:
@@ -572,12 +578,24 @@ def adapt_analysis_result(analysis: dict[str, Any]) -> dict[str, Any]:
         "risk_score": risk["score"], "severity": severity,
         "summary": f"{risk['category']}: {risk['factor_count']} explainable risk indicator(s) were identified.",
         "signals": signals,
-        "auth": auth,
+        "auth": auth_cards,
         "filename": evidence["filename"], "file_size": f"{evidence['size_bytes'] / 1024:.1f} KB", "sha256": evidence["sha256"],
         "raw_headers": "Raw header viewing is available in the original EML evidence file.", "hops": hops,
         "urls": [{"url": url, "reputation": "Review", "reason": "Extracted from email evidence"} for url in analysis.get("urls", [])],
         "keywords": list(dict.fromkeys(keywords)) or ["No suspicious content keywords found"], "analysis": analysis,
     }
+
+
+def _auth_summary(protocol: str, outcome: str) -> str:
+    """Keep result cards concise; complete header evidence remains separate."""
+    normalized = outcome.lower()
+    if normalized == "pass":
+        return f"Stamped {protocol.upper()} validation passed at the receiving mail server."
+    if normalized == "none":
+        return f"No {protocol.upper()} authentication result was present in the receiving server's stamp."
+    if normalized == "unavailable":
+        return f"No stamped {protocol.upper()} result was available in this email."
+    return f"Stamped {protocol.upper()} result: {normalized.upper()}. Review the raw header evidence for context."
 
 
 def inject_theme() -> None:
@@ -2143,7 +2161,7 @@ def render_results(result: dict[str, Any]) -> None:
 
     st.caption(
         (
-            "Route points appear when optional GeoIP enrichment is enabled in the backend."
+            "Only distinct public relay locations are plotted. Private and unavailable addresses remain in the hop timeline."
         )
     )
 
