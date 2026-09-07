@@ -29,7 +29,11 @@ async def health_check() -> dict[str, str]:
 
 
 @app.post("/api/v1/analyze")
-async def analyze_uploaded_email(file: UploadFile = File(..., description="Raw RFC 5322 .eml email")) -> dict[str, Any]:
+async def analyze_uploaded_email(
+    file: UploadFile = File(..., description="Raw RFC 5322 .eml email"),
+    enrich_hops: bool = False,
+    enrich_domain: bool = False,
+) -> dict[str, Any]:
     """Analyze uploaded evidence without persisting or modifying the bytes."""
     filename = file.filename or "uploaded.eml"
     if not filename.lower().endswith(".eml"):
@@ -41,7 +45,7 @@ async def analyze_uploaded_email(file: UploadFile = File(..., description="Raw R
     if len(raw) > MAX_EML_SIZE_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="EML file exceeds the 25 MiB limit.")
     try:
-        return analyze_email(raw, filename=filename)
+        return analyze_email(raw, filename=filename, enrich_hops=enrich_hops, enrich_domain=enrich_domain)
     except (TypeError, ValueError, OSError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Unable to analyze EML: {exc}") from exc
 

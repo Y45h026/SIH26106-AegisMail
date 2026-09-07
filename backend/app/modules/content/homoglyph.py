@@ -15,7 +15,7 @@ TARGETED_BRANDS: tuple[str, ...] = (
     "adobe", "airtel", "amazon", "americanexpress", "apple", "axisbank",
     "bankofamerica", "barclays", "chase", "citi", "coinbase", "docusign",
     "dropbox", "facebook", "fedex", "flipkart", "github", "google", "hdfc",
-    "icici", "income-tax", "instagram", "linkedin", "microsoft", "netflix",
+    "icici", "income-tax", "instagram", "linkedin", "manipal", "microsoft", "netflix",
     "office365", "okta", "outlook", "paypal", "phonepe", "razorpay", "sbi",
     "slack", "spotify", "stripe", "telegram", "tiktok", "twitter", "uber",
     "upi", "visa", "wellsfargo", "whatsapp", "windows", "wise", "yahoo",
@@ -110,27 +110,33 @@ def analyze_sender_domain(sender: str) -> dict[str, Any]:
 
     labels = unicode_domain.split(".")
     candidate_labels = labels[:-1]  # The public suffix alone is never a brand label.
+    # Check the full label and its hyphen/underscore-separated tokens. Attackers
+    # commonly bury a lookalike in labels such as ``muj-manipaI``.
     for label in candidate_labels:
-        label_skeleton = _skeleton(label)
-        for brand in TARGETED_BRANDS:
-            brand_skeleton = _skeleton(brand)
-            if label_skeleton == brand_skeleton and label != brand:
-                brands.add(brand)
-                findings.append({
-                    "type": "homoglyph",
-                    "brand": brand,
-                    "description": f"Label '{label}' visually normalizes to '{brand}'.",
-                    "evidence": label,
-                })
-            elif label_skeleton != brand_skeleton and levenshtein_distance(label_skeleton, brand_skeleton) <= 2:
-                brands.add(brand)
-                findings.append({
-                    "type": "typosquat",
-                    "brand": brand,
-                    "description": f"Label '{label}' is within two edits of '{brand}'.",
-                    "evidence": label,
-                })
+        comparison_labels = [label, *[token for token in re.split(r"[-_]", label) if token]]
+        for candidate_label in comparison_labels:
+            label_skeleton = _skeleton(candidate_label)
+            for brand in TARGETED_BRANDS:
+                brand_skeleton = _skeleton(brand)
+                if label_skeleton == brand_skeleton and candidate_label != brand:
+                    brands.add(brand)
+                    findings.append({
+                        "type": "homoglyph",
+                        "brand": brand,
+                        "description": f"Label '{candidate_label}' visually normalizes to '{brand}'.",
+                        "evidence": candidate_label,
+                    })
+                elif label_skeleton != brand_skeleton and levenshtein_distance(label_skeleton, brand_skeleton) <= 2:
+                    brands.add(brand)
+                    findings.append({
+                        "type": "typosquat",
+                        "brand": brand,
+                        "description": f"Label '{candidate_label}' is within two edits of '{brand}'.",
+                        "evidence": candidate_label,
+                    })
 
+        # Keep the original label for multi-token brand + lure-keyword checks.
+        label_skeleton = _skeleton(label)
         label_tokens = [token for token in re.split(r"[-_]", label) if token]
         for brand in TARGETED_BRANDS:
             if brand in label_tokens and any(token in SUSPICIOUS_SUBDOMAIN_KEYWORDS for token in label_tokens):

@@ -12,6 +12,11 @@ def _failed(value: object) -> bool:
     return value is False or (isinstance(value, str) and value.lower().strip() == "fail")
 
 
+def _none(value: object) -> bool:
+    """Return true only for an explicit recipient-MTA ``mechanism=none``."""
+    return isinstance(value, str) and value.lower().strip() == "none"
+
+
 def _enabled(signals: Mapping[str, Any], *names: str) -> bool:
     return any(bool(signals.get(name)) for name in names)
 
@@ -53,6 +58,12 @@ def score_email_risk(
         add("dmarc_fail", "authentication", 30, "DMARC validation failed.")
     if _failed(authentication.get("spf")):
         add("spf_fail", "authentication", 15, "SPF validation failed.")
+    if _none(authentication.get("dmarc")):
+        add("dmarc_missing", "authentication", 20, "DMARC produced no authentication result.")
+    if _none(authentication.get("spf")):
+        add("spf_missing", "authentication", 10, "SPF produced no authentication result.")
+    if _none(authentication.get("dkim")):
+        add("dkim_missing", "authentication", 10, "Message has no DKIM authentication result.")
     if _enabled(domain, "homoglyph_detected", "is_impersonation_suspected"):
         add("homoglyph_or_lookalike", "domain", 25, "Sender domain shows a homoglyph or lookalike-brand indicator.")
     domain_age = domain.get("age_days", domain.get("domain_age_days"))
@@ -69,6 +80,8 @@ def score_email_risk(
         add("high_urgency_bec", "content", 20, "Content contains high-confidence urgency or BEC deception indicators.")
     if _enabled(urls, "has_ip_based_url", "ip_based_url"):
         add("ip_based_url", "content", 15, "Email contains a URL using a literal IP address.")
+    if _enabled(urls, "has_deceptive_url_host", "url_lookalike"):
+        add("deceptive_url_host", "content", 25, "A URL host contains a lookalike or impersonation indicator.")
 
     raw_score = sum(factor["points"] for factor in factors)
     score = max(0, min(100, raw_score))

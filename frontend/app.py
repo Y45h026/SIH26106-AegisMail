@@ -532,10 +532,11 @@ def apply_uploaded_metadata(result: dict[str, Any], uploaded: Any) -> dict[str, 
     }
 
 
-def request_backend_analysis(uploaded: Any) -> dict[str, Any]:
+def request_backend_analysis(uploaded: Any, *, enrich_hops: bool) -> dict[str, Any]:
     """Submit raw upload bytes to FastAPI and return the forensic result."""
     response = requests.post(
         f"{API_BASE_URL}/api/v1/analyze",
+        params={"enrich_hops": str(enrich_hops).lower()},
         files={"file": (uploaded.name, uploaded.getvalue(), "message/rfc822")},
         timeout=30,
     )
@@ -560,6 +561,7 @@ def adapt_analysis_result(analysis: dict[str, Any]) -> dict[str, Any]:
         {"label": protocol.upper(), "technical": f"{protocol.upper()} authentication", "status": "pass" if auth[protocol]["result"] == "pass" else "danger", "detail": auth[protocol]["detail"] or "No stamped result was found."}
         for protocol in ("spf", "dkim", "dmarc")
     ]
+    auth = [(protocol.upper(), auth[protocol]["result"].upper(), auth[protocol]["detail"] or "No stamped result was found.") for protocol in ("spf", "dkim", "dmarc")]
     hops: list[dict[str, Any]] = []
     for hop in analysis["relay_hops"]["hops"]:
         for infrastructure in hop["infrastructure"] or [{"ip": None, "location": None, "isp": None}]:
@@ -570,6 +572,7 @@ def adapt_analysis_result(analysis: dict[str, Any]) -> dict[str, Any]:
         "risk_score": risk["score"], "severity": severity,
         "summary": f"{risk['category']}: {risk['factor_count']} explainable risk indicator(s) were identified.",
         "signals": signals,
+        "auth": auth,
         "filename": evidence["filename"], "file_size": f"{evidence['size_bytes'] / 1024:.1f} KB", "sha256": evidence["sha256"],
         "raw_headers": "Raw header viewing is available in the original EML evidence file.", "hops": hops,
         "urls": [{"url": url, "reputation": "Review", "reason": "Extracted from email evidence"} for url in analysis.get("urls", [])],
@@ -2351,6 +2354,12 @@ def render_upload_analyze() -> None:
         ),
     )
 
+    enrich_hops = st.checkbox(
+        "Enable GeoIP relay enrichment for this investigation",
+        value=True,
+        help="Public relay IP addresses will be sent to the configured GeoIP provider to plot the route.",
+    )
+
     if uploaded is not None:
         st.session_state.analyzed = True
         st.session_state.last_action = "upload"
@@ -2426,7 +2435,7 @@ def render_upload_analyze() -> None:
 
     if uploaded is not None and st.session_state.last_action == "upload":
         try:
-            result = adapt_analysis_result(request_backend_analysis(uploaded))
+            result = adapt_analysis_result(request_backend_analysis(uploaded, enrich_hops=enrich_hops))
         except requests.RequestException as exc:
             st.error(f"Backend analysis failed: {exc}. Start FastAPI at {API_BASE_URL}.")
             return

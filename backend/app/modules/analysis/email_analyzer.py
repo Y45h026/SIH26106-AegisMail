@@ -48,6 +48,7 @@ def analyze_email(
     domain = analyze_sender_domain(parsed.from_.email or "")
     domain_intelligence = lookup_domain_age(domain["domain"]) if enrich_domain else {"domain": domain["domain"], "status": "not_requested", "age_days": None}
     domain = {**domain, **domain_intelligence}
+    url_lookalikes = _url_lookalikes(parsed.urls)
     intent = analyze_email_intent(parsed.subject or "", parsed.plain_text_body or parsed.html_body or "")
     relay_hops = [_relay_hop(hop.model_dump(mode="json"), enrich_hops) for hop in hop_trace.hops]
     anomaly_ids = {finding.id for finding in authentication.anomalies}
@@ -55,6 +56,8 @@ def analyze_email(
     flags = {
         "lookalike_domain": domain["is_impersonation_suspected"],
         "lookalike_details": domain,
+        "deceptive_url_hosts": url_lookalikes,
+        "has_deceptive_url_host": bool(url_lookalikes),
         "wire_transfer_keywords": wire_transfer_indicators,
         "has_wire_transfer_indicator": bool(wire_transfer_indicators),
         "mismatched_return_path": "return_path_misaligned" in anomaly_ids,
@@ -67,7 +70,7 @@ def analyze_email(
         domain=domain,
         headers={"reply_to_mismatch": flags["reply_to_mismatch"], "has_message_id": parsed.message_id is not None},
         content=intent,
-        urls={"has_ip_based_url": _has_ip_based_url(parsed.urls)},
+        urls={"has_ip_based_url": _has_ip_based_url(parsed.urls), "has_deceptive_url_host": bool(url_lookalikes)},
     )
     return {
         "evidence": {
@@ -113,3 +116,18 @@ def _has_ip_based_url(urls: list[str]) -> bool:
             except ValueError:
                 pass
     return False
+
+
+def _url_lookalikes(urls: list[str]) -> list[dict[str, Any]]:
+    """Return impersonation findings from URL hosts, including deceptive subdomains."""
+    from urllib.parse import urlparse
+
+    findings: list[dict[str, Any]] = []
+    for url in urls:
+        hostname = urlparse(url if "://" in url else f"http://{url}").hostname
+        if not hostname:
+            continue
+        result = analyze_sender_domain(hostname)
+        if result["is_impersonation_suspected"]:
+            findings.append({"url": url, "host": hostname, "findings": result["findings"], "matched_brands": result["matched_brands"]})
+    return findings
