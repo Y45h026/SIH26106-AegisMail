@@ -24,7 +24,7 @@ def _enabled(signals: Mapping[str, Any], *names: str) -> bool:
 def _risk_band(score: int) -> tuple[str, str]:
     """Return the analyst-facing category and dashboard color for a score."""
     if score <= SAFE_MAX_SCORE:
-        return "Legitimate", "green"
+        return "Low Observed Risk", "green"
     if score <= 65:
         return "Suspicious", "yellow"
     if score < RED_RISK_MIN_SCORE:
@@ -40,14 +40,16 @@ def score_email_risk(
     headers: Mapping[str, Any] | None = None,
     content: Mapping[str, Any] | None = None,
     urls: Mapping[str, Any] | None = None,
+    identity: Mapping[str, Any] | None = None,
+    ml_content_analysis: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Aggregate verified analysis outputs into a 0-100 transparent risk score.
 
     Each input is optional. A factor is included only when its supporting signal
     is present, so reports can explain exactly why a score changed.
     """
-    authentication, domain, headers, content, urls = (
-        authentication or {}, domain or {}, headers or {}, content or {}, urls or {},
+    authentication, domain, headers, content, urls, identity, ml_content_analysis = (
+        authentication or {}, domain or {}, headers or {}, content or {}, urls or {}, identity or {}, ml_content_analysis or {},
     )
     factors: list[dict[str, Any]] = []
 
@@ -73,6 +75,17 @@ def score_email_risk(
         add("reply_to_mismatch", "headers", 15, "Reply-To domain does not match the sender domain.")
     if headers.get("has_message_id") is False or _enabled(headers, "missing_message_id"):
         add("missing_message_id", "headers", 10, "Message-ID header is absent.")
+    if _enabled(headers, "date_weekday_mismatch"):
+        add("timestamp_weekday_mismatch", "headers", 5, "A Date or Received timestamp names a weekday that does not match its calendar date; this is a weak header-integrity signal.")
+    financial_request = _enabled(content, "financial_request") or "financial_fraud" in content.get("detected_intents", [])
+    if financial_request:
+        add("financial_request_language", "content", 15, "Message content includes a financial-transfer, payment, or vendor language indicator.")
+    if _enabled(identity, "sender_identity_mismatch"):
+        detail = identity.get("detail") or "An external sender claims an authority role and targets an organizational recipient."
+        add("external_authority_impersonation", "identity", 25, detail)
+    if financial_request and _enabled(identity, "sensitive_recipient_roles"):
+        roles = ", ".join(identity.get("sensitive_recipient_roles", []))
+        add("sensitive_recipient_targeting", "identity", 10, f"A financial request targets a sensitive recipient function: {roles}.")
     intent_score = content.get("urgency_deception_score", content.get("bec_score", 0.0))
     if _enabled(content, "is_high_risk_bec", "high_urgency_bec") or (
         isinstance(intent_score, (int, float)) and intent_score >= 0.65
@@ -83,6 +96,13 @@ def score_email_risk(
     if _enabled(urls, "has_deceptive_url_host", "url_lookalike"):
         add("deceptive_url_host", "content", 25, "A URL host contains a lookalike or impersonation indicator.")
 
+    probability = ml_content_analysis.get("phishing_probability")
+    if ml_content_analysis.get("enabled") is True and ml_content_analysis.get("prediction") == "phishing" and isinstance(probability, (int, float)):
+        if probability >= 0.85:
+            add("ml_phishing_content", "content", 15, f"Content-based statistical evidence: the trained text classifier estimated a {probability:.1%} phishing probability.")
+        elif probability >= 0.70:
+            add("ml_phishing_content", "content", 8, f"Content-based statistical evidence: the trained text classifier estimated a {probability:.1%} phishing probability.")
+
     raw_score = sum(factor["points"] for factor in factors)
     score = max(0, min(100, raw_score))
     category, color = _risk_band(score)
@@ -90,7 +110,7 @@ def score_email_risk(
         "score": score,
         "category": category,
         "color": color,
-        "is_safe": score <= SAFE_MAX_SCORE,
+        "is_low_observed_risk": score <= SAFE_MAX_SCORE,
         "is_red_risk": score >= RED_RISK_MIN_SCORE,
         "raw_score": raw_score,
         "factors": factors,

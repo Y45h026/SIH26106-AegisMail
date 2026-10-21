@@ -10,6 +10,8 @@ INTENT_PATTERNS: dict[str, tuple[tuple[str, float], ...]] = {
         (r"\bwire transfer\b", 0.34), (r"\bbank account (?:has )?changed\b", 0.34),
         (r"\bgift cards?\b", 0.30), (r"\bimmediate payment\b", 0.30),
         (r"\bpayment (?:is )?overdue\b", 0.20),
+        (r"\bnew vendor\b", 0.20), (r"\bsecure (?:our |the )?contract\b", 0.18),
+        (r"\bbanking details\b", 0.20),
     ),
     "credential_harvesting": (
         (r"\bverify (?:your )?password\b", 0.34), (r"\baccount (?:is )?suspended\b", 0.30),
@@ -20,11 +22,14 @@ INTENT_PATTERNS: dict[str, tuple[tuple[str, float], ...]] = {
         (r"\bi am in a meeting\b", 0.28), (r"\bdo not call\b", 0.30),
         (r"\bhandle this immediately\b", 0.30), (r"\bceo\b", 0.14),
         (r"\bconfidential(?:ly)?\b", 0.16),
+        (r"\bboard meeting\b", 0.28), (r"\bcannot take (?:any )?calls\b", 0.30),
+        (r"\bare you at your desk\b", 0.12),
     ),
 }
 URGENCY_PATTERNS: tuple[tuple[str, float], ...] = (
     (r"\bimmediately\b", 0.12), (r"\burgent\b", 0.12), (r"\bwithin (?:the )?hour\b", 0.14),
     (r"\btoday\b", 0.07), (r"\baction required\b", 0.12), (r"\bfinal (?:notice|warning)\b", 0.12),
+    (r"\bin the next \d{1,3} minutes?\b", 0.14),
 )
 
 

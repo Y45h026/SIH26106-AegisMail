@@ -55,6 +55,7 @@ class ParsedEmail(BaseModel):
     urls: list[str] = Field(default_factory=list)
     attachments: list[AttachmentMetadata] = Field(default_factory=list)
     parse_warnings: list[str] = Field(default_factory=list)
+    header_anomalies: list[dict[str, str]] = Field(default_factory=list)
 
 
 def _decode_header(value: str | None) -> str | None:
@@ -124,6 +125,38 @@ def _parse_date(value: str | None, warnings: list[str]) -> datetime | None:
     except (TypeError, ValueError, IndexError):
         warnings.append("The Date header could not be parsed.")
         return None
+
+
+def _weekday_anomaly(value: str, field: str) -> dict[str, str] | None:
+    """Return a weak timestamp anomaly when its written weekday contradicts its date."""
+    weekday = re.match(r"\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b", value, flags=re.IGNORECASE)
+    if not weekday:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError):
+        return None
+    declared = weekday.group(1).title()
+    actual = parsed.strftime("%a")
+    if declared == actual:
+        return None
+    return {"field": field, "declared_weekday": declared, "actual_weekday": actual,
+            "date": parsed.date().isoformat()}
+
+
+def _header_date_anomalies(message: Message) -> list[dict[str, str]]:
+    anomalies: list[dict[str, str]] = []
+    date_value = message.get("Date")
+    if date_value:
+        item = _weekday_anomaly(str(date_value), "Date")
+        if item:
+            anomalies.append(item)
+    for index, received in enumerate(message.get_all("Received", []), start=1):
+        stamp = str(received).rsplit(";", 1)[-1].strip()
+        item = _weekday_anomaly(stamp, f"Received[{index}]")
+        if item:
+            anomalies.append(item)
+    return anomalies
 
 
 def _load_raw_content(source: EmlSource) -> bytes:
@@ -202,4 +235,5 @@ def parse_eml(source: EmlSource) -> ParsedEmail:
         urls=_extract_urls(plain_text, html_text),
         attachments=attachments,
         parse_warnings=warnings,
+        header_anomalies=_header_date_anomalies(message),
     )

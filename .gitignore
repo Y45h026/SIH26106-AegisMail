@@ -45,3 +45,21 @@ Thumbs.db
 .env.local
 config.local.json
 secrets.json
+
+# Locally supplied training data, trained models, and generated reports
+backend/data/raw/
+backend/data/processed/
+backend/data/*.csv
+backend/training/*.csv
+backend/training/training_report.json
+backend/data/dataset_manifest.json
+backend/models/*.joblib
+backend/models/*.pkl
+backend/models/*.pickle
+backend/models/*.onnx
+
+# User-local downloaded email corpora (never commit raw email data)
+Training_and_testing/
+
+# Personal email evidence: contains a real recipient address and tracking links
+samples/malicious_redirect/Open Doors to Unknown Paths with a Certificate.eml

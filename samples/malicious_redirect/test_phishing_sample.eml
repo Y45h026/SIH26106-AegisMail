@@ -1,0 +1,75 @@
+Received: from mail-relay.suspicious-host.invalid (unknown [203.0.113.45])
+	by mx.victim-domain.example with ESMTP id 4f8a1c2d
+	for <student@victim-domain.example>; Mon, 19 Oct 2026 03:12:44 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mail-relay.suspicious-host.invalid (Postfix) with ESMTP id A1B2C3D4E5
+	for <student@victim-domain.example>; Mon, 19 Oct 2026 03:12:40 +0000
+Authentication-Results: mx.victim-domain.example;
+	spf=fail (sender IP 203.0.113.45 is not permitted by domain secure-bank-alerts.example) smtp.mailfrom=bounce@free-prizes-mailer.invalid;
+	dkim=none (message not signed);
+	dmarc=fail (p=reject) header.from=secure-bank-alerts.example
+Return-Path: <bounce@free-prizes-mailer.invalid>
+From: "SecureBank Security Team" <security@secure-bank-alerts.example>
+Reply-To: "Account Recovery" <recover-account-now@freemail-cheap.invalid>
+To: student@victim-domain.example
+Subject: URGENT!!! Your account has been SUSPENDED - verify within 24 hours
+Date: Mon, 19 Oct 2026 08:42:40 +0530
+Message-ID: <8f3a9c1e7d2b4a65@free-prizes-mailer.invalid>
+X-Mailer: MassMailer Pro 3.1
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="----=_Part_000_BOUNDARY_123456"
+
+------=_Part_000_BOUNDARY_123456
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 7bit
+
+Dear Valued Customer,
+
+We have detected SUSPICIOUS ACTIVITY on your account. For your protection,
+your account has been TEMPORARILY SUSPENDED.
+
+You must verify your identity IMMEDIATELY or your account will be
+permanently closed and all funds will be LOST.
+
+Click the link below and confirm your username, password, card number and
+PIN to restore access:
+
+http://203.0.113.45/secure-login/verify.php?id=88213
+
+Failure to act within 24 HOURS will result in permanent account termination.
+
+CONGRATULATIONS! As an apology for the inconvenience you have also been
+selected to receive a FREE $5,000 reward. Claim it now - this is a limited
+time offer, act fast, do not tell anyone!
+
+Thank you for your immediate cooperation.
+
+SecureBank Security Team
+(This is an automated message, do not reply to this email)
+
+------=_Part_000_BOUNDARY_123456
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 7bit
+
+<html>
+<body style="font-family: Arial, sans-serif;">
+<p>Dear Valued Customer,</p>
+<p>We have detected <b style="color:red;">SUSPICIOUS ACTIVITY</b> on your account.
+For your protection, your account has been <b>TEMPORARILY SUSPENDED</b>.</p>
+<p>You must verify your identity <u>IMMEDIATELY</u> or your account will be
+permanently closed and all funds will be <b>LOST</b>.</p>
+<p>
+<a href="http://203.0.113.45/secure-login/verify.php?id=88213">https://www.securebank.example/login/verify</a>
+</p>
+<p>Confirm your username, password, card number and PIN to restore access.
+Failure to act within <b>24 HOURS</b> will result in permanent termination.</p>
+<p><b>CONGRATULATIONS!</b> You have also been selected to receive a
+<span style="color:green;">FREE $5,000 reward</span>.
+<a href="http://free-prizes-mailer.invalid/claim?u=student">CLAIM NOW</a>
+- limited time offer, do not tell anyone!</p>
+<p>SecureBank Security Team<br>
+<small>(This is an automated message, do not reply to this email)</small></p>
+</body>
+</html>
+
+------=_Part_000_BOUNDARY_123456--

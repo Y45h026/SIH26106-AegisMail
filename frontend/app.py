@@ -1,19 +1,9 @@
-"""AegisMail Streamlit investigation dashboard.
-
-This frontend intentionally uses isolated demo data until the team's analysis
-pipeline exposes its final response model. Replace ``build_demo_result`` with
-an adapter for that response when the backend contract is ready.
-
-The app is organised as two in-app "pages" (Home, Upload & Analyze) toggled
-via ``st.session_state.page``. This keeps navigation lightweight and avoids
-adding a routing dependency that isn't already part of the project.
-"""
+"""AegisMail Streamlit investigation dashboard."""
 
 from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
 from typing import Any
 
 import requests
@@ -27,14 +17,8 @@ def html_block(raw: str) -> str:
     return "\n".join(line.strip() for line in raw.strip().splitlines())
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 API_BASE_URL = os.getenv("AEGISMAIL_API_URL", "http://127.0.0.1:8000")
 
-SAMPLE_DIRECTORIES = {
-    "legitimate": PROJECT_ROOT / "samples" / "legitimate",
-    "spoofed": PROJECT_ROOT / "samples" / "spoofed_dmarc_fail",
-    "bec": PROJECT_ROOT / "samples" / "bec_wire_fraud",
-}
 
 
 # Temporary GeoIP handoff fixture. Member 3's output can replace this list
@@ -49,7 +33,11 @@ MOCK_HOP_COORDINATES = [
 SEVERITY_STYLES: dict[str, dict[str, str]] = {
     "LOW RISK": {
         "accent": "#56e6bb",
-        "headline": "SAFE — LOW RISK EMAIL",
+        "headline": "LOW OBSERVED RISK — NO STRONG INDICATORS",
+    },
+    "LOW OBSERVED RISK": {
+        "accent": "#56e6bb",
+        "headline": "LOW OBSERVED RISK — NO STRONG INDICATORS",
     },
     "HIGH RISK": {
         "accent": "#ffb020",
@@ -64,9 +52,14 @@ SEVERITY_STYLES: dict[str, dict[str, str]] = {
 
 RECOMMENDED_ACTIONS: dict[str, list[str]] = {
     "LOW RISK": [
-        "No immediate action is required.",
-        "You can continue with this email as normal.",
-        "Stay cautious if it later asks for sensitive information or payment.",
+        "No strong risk indicators were scored in this review.",
+        "This result does not prove who sent the message or establish benign intent.",
+        "Verify requests involving money or sensitive information through a trusted channel.",
+    ],
+    "LOW OBSERVED RISK": [
+        "No strong risk indicators were scored in this review.",
+        "This result does not prove who sent the message or establish benign intent.",
+        "Verify requests involving money or sensitive information through a trusted channel.",
     ],
     "HIGH RISK": [
         "Do not click any links in this email.",
@@ -85,26 +78,6 @@ RECOMMENDED_ACTIONS: dict[str, list[str]] = {
 }
 
 
-DEMO_SCENARIOS: dict[str, dict[str, str]] = {
-    "legitimate": {
-        "title": "Legitimate Email",
-        "desc": "A normal email with expected authentication results.",
-        "button": "Load Legitimate Sample",
-    },
-    "spoofed": {
-        "title": "Spoofed Sender",
-        "desc": "An example where the sender or domain cannot be properly verified.",
-        "button": "Load Spoofed Sender Sample",
-    },
-    "bec": {
-        "title": "Business Email Scam",
-        "desc": (
-            "An example of a suspicious email attempting to pressure someone "
-            "into an action such as a financial transfer."
-        ),
-        "button": "Load Business Scam Sample",
-    },
-}
 
 
 FEATURES: list[dict[str, str]] = [
@@ -280,258 +253,6 @@ HERO_PREVIEW_HTML = html_block(f"""
 """).strip()
 
 
-def build_demo_result(profile: str = "bec") -> dict[str, Any]:
-    """Return presentation-only data shaped for easy future backend replacement."""
-
-    profiles = {
-        "legitimate": {
-            "risk_score": 12,
-            "severity": "LOW RISK",
-            "summary": (
-                "This email passed standard authentication checks and shows no "
-                "signs of spoofing or fraud."
-            ),
-            "signals": [
-                {
-                    "label": "Sender Verified",
-                    "technical": "SPF Alignment",
-                    "status": "pass",
-                    "detail": (
-                        "The sending server is authorized to send mail for this domain."
-                    ),
-                },
-                {
-                    "label": "Signature Valid",
-                    "technical": "DKIM Signature",
-                    "status": "pass",
-                    "detail": (
-                        "The email's digital signature is valid and has not been altered."
-                    ),
-                },
-                {
-                    "label": "Domain Policy Passed",
-                    "technical": "DMARC Pass",
-                    "status": "pass",
-                    "detail": "The sender's domain passed alignment checks.",
-                },
-            ],
-            "filename": "clean_invoice.eml",
-            "auth": [
-                (
-                    "SPF",
-                    "PASS",
-                    "The sending server is authorized for this domain.",
-                ),
-                (
-                    "DKIM",
-                    "PASS",
-                    "The message signature is valid.",
-                ),
-                (
-                    "DMARC",
-                    "PASS",
-                    "The sender domain passed alignment checks.",
-                ),
-            ],
-        },
-        "spoofed": {
-            "risk_score": 73,
-            "severity": "HIGH RISK",
-            "summary": (
-                "This email failed sender verification checks and may not be "
-                "from who it claims to be."
-            ),
-            "signals": [
-                {
-                    "label": "Sender Authentication Failed",
-                    "technical": "DMARC Failure",
-                    "status": "danger",
-                    "detail": (
-                        "Technical checks could not fully verify the sender's domain."
-                    ),
-                },
-                {
-                    "label": "Unauthorized Sending Server",
-                    "technical": "SPF Misalignment",
-                    "status": "danger",
-                    "detail": (
-                        "The email was sent from a server not authorized by the "
-                        "sender's domain."
-                    ),
-                },
-                {
-                    "label": "Possible Identity Spoofing",
-                    "technical": "Sender Spoofing",
-                    "status": "danger",
-                    "detail": (
-                        "The sender's identity may have been disguised to look "
-                        "like a trusted source."
-                    ),
-                },
-            ],
-            "filename": "paypal_spoofed.eml",
-            "auth": [
-                (
-                    "SPF",
-                    "FAIL",
-                    "The sending server could not be verified as authorized.",
-                ),
-                (
-                    "DKIM",
-                    "FAIL",
-                    "No valid signature was found on this message.",
-                ),
-                (
-                    "DMARC",
-                    "FAIL",
-                    "The sender domain did not pass alignment checks.",
-                ),
-            ],
-        },
-        "bec": {
-            "risk_score": 88,
-            "severity": "CRITICAL RISK",
-            "summary": (
-                "This email shows multiple signs of possible spoofing or fraud, "
-                "including a suspicious payment request."
-            ),
-            "signals": [
-                {
-                    "label": "Sender Authentication Failed",
-                    "technical": "DMARC Failure",
-                    "status": "danger",
-                    "detail": (
-                        "Technical checks could not fully verify the sender's domain."
-                    ),
-                },
-                {
-                    "label": "Possible Lookalike Domain",
-                    "technical": "Lookalike Domain",
-                    "status": "danger",
-                    "detail": (
-                        "The sender's domain closely resembles a trusted domain — "
-                        "a common scam tactic."
-                    ),
-                },
-                {
-                    "label": "Suspicious Payment Request",
-                    "technical": "Wire Transfer Intent",
-                    "status": "danger",
-                    "detail": (
-                        "The email requests an urgent wire transfer or payment, "
-                        "a common fraud technique."
-                    ),
-                },
-            ],
-            "filename": "ceo_giftcard.eml",
-            "auth": [
-                (
-                    "SPF",
-                    "FAIL",
-                    "The return path does not match the claimed sending domain.",
-                ),
-                (
-                    "DKIM",
-                    "NEUTRAL",
-                    "No signature was available to verify.",
-                ),
-                (
-                    "DMARC",
-                    "FAIL",
-                    "The sender domain did not pass alignment checks.",
-                ),
-            ],
-        },
-    }
-
-    selected = profiles.get(profile, profiles["bec"])
-
-    return {
-        **selected,
-        "file_size": "24.8 KB",
-        "sha256": (
-            "a9d4e0c7b8a8f2c64f1edb6339007a60962ff9cbca88cb1aa7a67b87d4f108e3"
-        ),
-        "raw_headers": """Received: from outbound.mail-eu.example (198.51.100.42)
-\tby mx.google.com with ESMTPS id a1b2c3; Tue, 02 Sep 2026 09:42:17 +0530
-Authentication-Results: mx.google.com; spf=fail; dkim=neutral; dmarc=fail
-From: Executive Office <ceo@acme-payrnents.com>
-Reply-To: payments@secure-transfer-alert.net
-Subject: Urgent: confidential wire approval required
-Message-ID: <8e2f5d7a@example.invalid>""",
-        "hops": [
-            {
-                "sequence": 1,
-                "ip": "185.220.101.14",
-                "host": "edge-relay-14",
-                "isp": "Mullvad VPN",
-                "country": "Sweden",
-                "lat": 59.3293,
-                "lon": 18.0686,
-                "latency": "—",
-            },
-            {
-                "sequence": 2,
-                "ip": "198.51.100.42",
-                "host": "outbound.mail-eu",
-                "isp": "Example Transit",
-                "country": "Germany",
-                "lat": 50.1109,
-                "lon": 8.6821,
-                "latency": "142 ms",
-            },
-            {
-                "sequence": 3,
-                "ip": "142.250.150.27",
-                "host": "mx.google.com",
-                "isp": "Google LLC",
-                "country": "India",
-                "lat": 19.0760,
-                "lon": 72.8777,
-                "latency": "96 ms",
-            },
-        ],
-        "urls": [
-            {
-                "url": "https://secure-transfer-alert.net/approve",
-                "reputation": "Suspicious",
-                "reason": "Newly observed domain",
-            },
-            {
-                "url": "http://185.220.101.14/invoice",
-                "reputation": "High risk",
-                "reason": "Direct IP URL",
-            },
-        ],
-        "keywords": [
-            "urgent",
-            "wire transfer",
-            "confidential",
-            "do not call",
-            "bank details",
-        ],
-    }
-
-
-def sample_exists(profile: str) -> bool:
-    directory = SAMPLE_DIRECTORIES[profile]
-    return directory.exists() and any(directory.glob("*.eml"))
-
-
-def apply_uploaded_metadata(result: dict[str, Any], uploaded: Any) -> dict[str, Any]:
-    if uploaded is None:
-        return result
-
-    raw = uploaded.getvalue()
-
-    return {
-        **result,
-        "filename": uploaded.name,
-        "file_size": f"{len(raw) / 1024:.1f} KB",
-        "sha256": hashlib.sha256(raw).hexdigest(),
-    }
-
-
 def request_backend_analysis(uploaded: Any, *, enrich_hops: bool) -> dict[str, Any]:
     """Submit raw upload bytes to FastAPI and return the forensic result."""
     response = requests.post(
@@ -556,7 +277,7 @@ def adapt_analysis_result(analysis: dict[str, Any]) -> dict[str, Any]:
     evidence, auth, risk, flags = (
         analysis["evidence"], analysis["authentication"], analysis["risk_score"], analysis["suspicious_flags"]
     )
-    severity = {"Legitimate": "LOW RISK", "Suspicious": "HIGH RISK", "High Risk": "HIGH RISK", "Critical Threat": "CRITICAL RISK"}[risk["category"]]
+    severity = {"Low Observed Risk": "LOW OBSERVED RISK", "Legitimate": "LOW RISK", "Suspicious": "HIGH RISK", "High Risk": "HIGH RISK", "Critical Threat": "CRITICAL RISK"}[risk["category"]]
     auth_cards = [
         (protocol.upper(), auth[protocol]["result"].upper(), _auth_summary(protocol, auth[protocol]["result"]))
         for protocol in ("spf", "dkim", "dmarc")
@@ -583,6 +304,7 @@ def adapt_analysis_result(analysis: dict[str, Any]) -> dict[str, Any]:
         "raw_headers": "Raw header viewing is available in the original EML evidence file.", "hops": hops,
         "urls": [{"url": url, "reputation": "Review", "reason": "Extracted from email evidence"} for url in analysis.get("urls", [])],
         "keywords": list(dict.fromkeys(keywords)) or ["No suspicious content keywords found"], "analysis": analysis,
+        "ml_content_analysis": analysis.get("ml_content_analysis", {"enabled": False, "status": "model_unavailable"}),
     }
 
 
@@ -1293,51 +1015,6 @@ def inject_theme() -> None:
         }
 
 
-        /* DEMO CARDS */
-
-        .scenario-card {
-            height: 100%;
-            min-height: 165px;
-            box-sizing: border-box;
-
-            padding: 1.35rem;
-            border-radius: 16px;
-
-            background: rgba(13,33,50,.68);
-            border: 1px solid rgba(255,255,255,.07);
-
-            margin-bottom: .75rem;
-        }
-
-        .scenario-kicker {
-            font: 700 .66rem monospace;
-            letter-spacing: .13em;
-            color: #6694a6;
-            margin-bottom: .6rem;
-        }
-
-        .scenario-title {
-            font-weight: 750;
-            color: #eef8ff;
-            font-size: 1rem;
-            margin-bottom: .45rem;
-        }
-
-        .scenario-desc {
-            color: #a8c0cf;
-            font-size: .9rem;
-            line-height: 1.55;
-            margin: 0;
-        }
-
-        .demo-note {
-            color: #8fa8b5;
-            font-size: .88rem;
-            line-height: 1.55;
-            margin-top: -.2rem;
-        }
-
-
         /* EMPTY STATE */
 
         .empty-state {
@@ -1704,16 +1381,6 @@ def render_feature_card(
     )
 
 
-def render_scenario_card(meta: dict[str, str]) -> str:
-    return (
-        '<div class="scenario-card">'
-        '<div class="scenario-kicker">DEMO SCENARIO</div>'
-        f'<div class="scenario-title">{meta["title"]}</div>'
-        f'<p class="scenario-desc">{meta["desc"]}</p>'
-        "</div>"
-    )
-
-
 def render_step_card(step: dict[str, str]) -> str:
     return (
         '<div class="step-card">'
@@ -1758,7 +1425,6 @@ def render_navbar() -> None:
             type="secondary",
         ):
             st.session_state.page = "home"
-            st.session_state.analyzed = False
             st.rerun()
 
         if st.session_state.page == "home":
@@ -1918,9 +1584,8 @@ def render_home() -> None:
             </div>
 
             <p class="cta-panel-desc">
-                Upload a .eml file or try a demo scenario. AegisMail will
-                guide you through what it finds and explain what the results
-                mean.
+                Upload a .eml file and AegisMail will guide you through what it
+                finds and explain what the results mean.
             </p>
 
         </div>
@@ -1945,7 +1610,18 @@ def render_home() -> None:
 def render_results(result: dict[str, Any]) -> None:
     style = SEVERITY_STYLES[result["severity"]]
     accent = style["accent"]
-    is_safe = result["severity"] == "LOW RISK"
+    is_low_observed_risk = result["severity"] in {"LOW RISK", "LOW OBSERVED RISK"}
+
+    ml = result.get("ml_content_analysis", {"enabled": False, "status": "model_unavailable"})
+    section_header("CONTENT CLASSIFIER", "ML Content Analysis", "A statistical model adds one bounded, explainable content signal.")
+    if ml.get("enabled"):
+        st.markdown(f"**Prediction:** {ml.get('prediction', 'unavailable').title()}  \n**Phishing probability:** {ml.get('phishing_probability', 0):.0%}  \n**Confidence:** {ml.get('confidence', 'unavailable').title()}")
+        indicators = ml.get("top_indicators", [])[:3]
+        if indicators:
+            st.caption("Top model indicators: " + ", ".join(f"{item['term']} ({item['direction']})" for item in indicators))
+    else:
+        st.markdown("**Prediction:** Unavailable  \n**Phishing probability:** Unavailable  \n**Confidence:** Unavailable")
+    st.caption("This is one content-analysis signal. AegisMail combines it with email authentication, URLs, domains, and relay evidence.")
 
     st.markdown(
         (
@@ -2040,13 +1716,13 @@ def render_results(result: dict[str, Any]) -> None:
 
     section_header(
         "EXPLAINABILITY",
-        "Why This Email Looks Safe"
-        if is_safe
+        "Signals Reviewed"
+        if is_low_observed_risk
         else "Why Was It Flagged?",
         (
             "These checks explain the verdict above using plain language, "
             "with the underlying technical signal shown for reference."
-            if is_safe
+            if is_low_observed_risk
             else
             "These are the specific signals that raised concern about this email."
         ),
@@ -2071,15 +1747,15 @@ def render_results(result: dict[str, Any]) -> None:
         (
             "No immediate action is required, but here are a few good habits "
             "to keep in mind."
-            if is_safe
+            if is_low_observed_risk
             else
-            "Follow these steps to stay safe and help preserve evidence for "
+            "Follow these steps to reduce risk and help preserve evidence for "
             "investigation."
         ),
     )
 
     action_items = RECOMMENDED_ACTIONS[result["severity"]]
-    bullet = "✓" if is_safe else "•"
+    bullet = "✓" if is_low_observed_risk else "•"
 
     items_html = "".join(
         (
@@ -2324,13 +2000,15 @@ def render_results(result: dict[str, Any]) -> None:
     )
 
     with export_col:
-        if result.get("analysis") and st.button("Prepare Forensic Report", type="primary", use_container_width=True):
-            try:
-                st.session_state.report_pdf = request_forensic_report(result["analysis"])
-            except requests.RequestException as exc:
-                st.error(f"Report generation failed: {exc}")
         if st.session_state.get("report_pdf"):
-            st.download_button("Download PDF Report", st.session_state.report_pdf, file_name="aegismail_forensic_report.pdf", mime="application/pdf", use_container_width=True)
+            st.download_button(
+                "Download Forensic PDF",
+                st.session_state.report_pdf,
+                file_name="aegismail_forensic_report.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                key=f"download_forensic_pdf_{st.session_state.get('report_sha256', 'current')}",
+            )
 
     with note_col:
         st.caption(
@@ -2338,127 +2016,62 @@ def render_results(result: dict[str, Any]) -> None:
         )
 
 
+
+
 def render_upload_analyze() -> None:
     st.markdown(
         html_block("""
         <div class="upload-intro">
-
-            <div class="upload-kicker">
-                UPLOAD &amp; ANALYZE
-            </div>
-
-            <div class="upload-title">
-                Start an email investigation
-            </div>
-
+            <div class="upload-kicker">UPLOAD &amp; ANALYZE</div>
+            <div class="upload-title">Start an email investigation</div>
             <p class="upload-copy">
                 Upload a suspicious .eml file and AegisMail will turn technical
-                checks into a clear investigation summary. You can also explore
-                a pre-loaded example first.
+                checks into a clear investigation summary.
             </p>
-
         </div>
-        """).strip(),
+        """),
         unsafe_allow_html=True,
     )
-
 
     uploaded = st.file_uploader(
         "Choose an email file",
         type=["eml"],
-        help=(
-            "Only standard .eml email files are supported. The UI runs on mock "
-            "analysis data until the backend pipeline is connected."
-        ),
+        help="Only standard .eml email files are supported.",
     )
-
     enrich_hops = st.checkbox(
         "Enable GeoIP relay enrichment for this investigation",
         value=True,
         help="Public relay IP addresses will be sent to the configured GeoIP provider to plot the route.",
     )
 
-    if uploaded is not None:
-        st.session_state.analyzed = True
-        st.session_state.last_action = "upload"
-
-
-    section_header(
-        "TRY A DEMO",
-        "Explore AegisMail Before Uploading",
-        (
-            "These pre-loaded example emails show how the investigation works. "
-            "Choose one to see the type of results AegisMail can present."
-        ),
-    )
-
-    st.markdown(
-        (
-            '<p class="demo-note">'
-            "A demo is simply an example email, so you can explore the platform "
-            "without uploading your own file."
-            "</p>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-
-    demo_cols = st.columns(
-        3,
-        gap="large",
-    )
-
-    for col, (profile, meta) in zip(
-        demo_cols,
-        DEMO_SCENARIOS.items(),
-    ):
-        with col:
-            st.markdown(
-                render_scenario_card(meta),
-                unsafe_allow_html=True,
-            )
-
-            if st.button(
-                meta["button"],
-                use_container_width=True,
-                key=f"sample_{profile}",
-            ):
-                st.session_state.profile = profile
-                st.session_state.analyzed = True
-                st.session_state.last_action = "sample"
-
-                if not sample_exists(profile):
-                    st.toast(
-                        (
-                            "Sample .eml is not committed yet — loading the "
-                            "matching mock investigation."
-                        )
-                    )
-
-                st.rerun()
-
-
-    if not st.session_state.analyzed:
+    if uploaded is None:
         st.markdown(
-            (
-                '<div class="empty-state">'
-                "Your investigation results will appear here after you upload "
-                "an email or choose a demo scenario above."
-                "</div>"
-            ),
+            '<div class="empty-state">Upload an .eml file to see investigation results.</div>',
             unsafe_allow_html=True,
         )
         return
 
-
-    if uploaded is not None and st.session_state.last_action == "upload":
+    raw = uploaded.getvalue()
+    upload_sha256 = hashlib.sha256(raw).hexdigest()
+    analysis_key = f"{upload_sha256}:{int(enrich_hops)}"
+    if st.session_state.get("analysis_key") != analysis_key:
         try:
-            result = adapt_analysis_result(request_backend_analysis(uploaded, enrich_hops=enrich_hops))
+            analysis = request_backend_analysis(uploaded, enrich_hops=enrich_hops)
         except requests.RequestException as exc:
             st.error(f"Backend analysis failed: {exc}. Start FastAPI at {API_BASE_URL}.")
             return
-    else:
-        result = build_demo_result(st.session_state.profile)
+        st.session_state.analysis_key = analysis_key
+        st.session_state.analysis_result = adapt_analysis_result(analysis)
+        st.session_state.pop("report_sha256", None)
+        st.session_state.pop("report_pdf", None)
+
+    result = st.session_state.analysis_result
+    if st.session_state.get("report_sha256") != analysis_key:
+        try:
+            st.session_state.report_pdf = request_forensic_report(result["analysis"])
+            st.session_state.report_sha256 = analysis_key
+        except requests.RequestException as exc:
+            st.error(f"Forensic PDF generation failed: {exc}")
 
     render_results(result)
 
@@ -2474,15 +2087,6 @@ def main() -> None:
 
     if "page" not in st.session_state:
         st.session_state.page = "home"
-
-    if "profile" not in st.session_state:
-        st.session_state.profile = "bec"
-
-    if "analyzed" not in st.session_state:
-        st.session_state.analyzed = False
-
-    if "last_action" not in st.session_state:
-        st.session_state.last_action = None
 
 
     render_navbar()

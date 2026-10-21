@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-FIXTURE = Path("samples/spoofed_dmarc_fail/paypal_spoofed.eml")
+FIXTURE = Path(__file__).resolve().parents[2] / "samples/spoofed_dmarc_fail/paypal_spoofed.eml"
 
 
 class ApiEndToEndTests(unittest.TestCase):
@@ -23,6 +23,8 @@ class ApiEndToEndTests(unittest.TestCase):
         self.assertEqual(analysis["evidence"]["filename"], FIXTURE.name)
         self.assertEqual(analysis["authentication"]["dmarc"]["result"], "fail")
         self.assertIn("risk_score", analysis)
+        self.assertIn("ml_content_analysis", analysis)
+        self.assertIn(analysis["ml_content_analysis"]["status"], {"success", "model_unavailable"})
         report = self.client.post("/api/v1/report", json=analysis)
         self.assertEqual(report.status_code, 200)
         self.assertEqual(report.headers["content-type"], "application/pdf")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from typing import Any
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -24,6 +25,9 @@ def generate_forensic_report(analysis: dict[str, Any]) -> bytes:
     authentication = analysis["authentication"]
     risk = analysis["risk_score"]
     flags = analysis["suspicious_flags"]
+    ml = analysis.get("ml_content_analysis", {})
+    intent = analysis.get("content_intent", {})
+    identity = analysis.get("sender_identity_analysis", {})
     story: list[Any] = [
         Paragraph("DIGITAL FORENSIC INCIDENT REPORT — AEGISMAIL", title),
         Paragraph(f"Analysis timestamp (UTC): {evidence['analysis_timestamp']}", body), Spacer(1, 8),
@@ -32,11 +36,27 @@ def generate_forensic_report(analysis: dict[str, Any]) -> bytes:
         _table([["Original filename", evidence["filename"]], ["SHA-256", evidence["sha256"]], ["MD5 (identifier only)", evidence["md5"]], ["Size", f"{evidence['size_bytes']} bytes"]]),
         Paragraph("Authentication Results", section),
         _table([["SPF", authentication["spf"]["result"]], ["DKIM", authentication["dkim"]["result"]], ["DMARC", authentication["dmarc"]["result"]], ["Overall", authentication["overall_verdict"]]]),
+        Paragraph("Content, Sender Identity &amp; Header Review", section),
+        _table([
+            ["Content intent score", f"{intent.get('urgency_deception_score', 0):.2f}"],
+            ["Matched content indicators", "; ".join(f"{item['phrase']} ({item['category']})" for item in intent.get("matched_indicators", [])) or "None detected"],
+            ["Sender identity review", identity.get("detail") or "No configured sender-role mismatch was detected."],
+            ["Date/header anomalies", "; ".join(flags.get("date_weekday_mismatch_details", [])) or "None detected"],
+            ["Verification suppression", "Detected" if flags.get("verification_suppression_language") else "Not detected"],
+        ]),
+        Paragraph("ML Content Analysis", section),
+        _table(_ml_rows(ml)),
         Paragraph("Explainable Risk Factors", section),
     ]
     factors = risk["factors"] or [{"code": "none", "points": 0, "description": "No scored risk factors were detected."}]
     story.append(_table([[factor["code"], f"+{factor['points']}", factor["description"]] for factor in factors], header=["Factor", "Points", "Evidence"]))
-    story.extend([Paragraph("Suspicious Flags", section), _table([[name.replace("_", " ").title(), str(value)] for name, value in flags.items() if isinstance(value, (bool, str, int, float))])])
+    flag_rows = []
+    for name, value in flags.items():
+        if isinstance(value, (bool, str, int, float)):
+            flag_rows.append([name.replace("_", " ").title(), str(value)])
+        elif isinstance(value, list) and value:
+            flag_rows.append([name.replace("_", " ").title(), "; ".join(str(item) for item in value)])
+    story.extend([Paragraph("Suspicious Flags", section), _table(flag_rows or [["None", "No additional flags"]])])
     story.append(Paragraph("Relay Hop Reconstruction", section))
     hop_rows = []
     for hop in analysis["relay_hops"]["hops"]:
@@ -48,9 +68,27 @@ def generate_forensic_report(analysis: dict[str, Any]) -> bytes:
     return buffer.getvalue()
 
 
+def _ml_rows(ml: dict[str, Any]) -> list[list[str]]:
+    if not ml.get("enabled"):
+        return [["Status", str(ml.get("status", "unavailable"))],
+                ["Prediction", "Unavailable"], ["Phishing probability", "Unavailable"]]
+    indicators = ml.get("top_indicators", [])[:3]
+    indicator_text = "; ".join(f"{item['term']} ({item['direction']})" for item in indicators) or "No meaningful feature explanation available"
+    probability = ml.get("phishing_probability")
+    return [
+        ["Prediction", str(ml.get("prediction", "unavailable")).title()],
+        ["Phishing probability", f"{probability:.1%}" if isinstance(probability, (int, float)) else "Unavailable"],
+        ["Confidence", str(ml.get("confidence", "unavailable")).title()],
+        ["Top model indicators", indicator_text],
+        ["Interpretation", "One content-analysis signal; the composite score also uses authentication, URLs, domains, and relay evidence."],
+    ]
+
+
 def _table(rows: list[list[str]], header: list[str] | None = None) -> Table:
     data = ([header] if header else []) + rows
-    table = Table(data, colWidths=None, repeatRows=1 if header else 0, hAlign="LEFT")
+    cell_style = ParagraphStyle("AegisTableCell", fontName="Helvetica", fontSize=7.5, leading=9.5)
+    wrapped = [[Paragraph(escape(str(cell)), cell_style) for cell in row] for row in data]
+    table = Table(wrapped, colWidths=None, repeatRows=1 if header else 0, hAlign="LEFT")
     table.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#9fb3c8")),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d9eaf7") if header else colors.white),

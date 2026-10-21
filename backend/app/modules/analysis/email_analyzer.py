@@ -9,6 +9,8 @@ from typing import Any
 from app.modules.auth.verifier import verify_email
 from app.modules.content.homoglyph import analyze_sender_domain
 from app.modules.content.nlp_intent import analyze_email_intent
+from app.modules.content.ml_classifier import analyze_content
+from app.modules.content.sender_identity import analyze_sender_identity
 from app.modules.hops.hop_tracer import trace_hops
 from app.modules.intel.geoip import lookup_ip
 from app.modules.intel.domain_age import lookup_domain_age
@@ -50,9 +52,16 @@ def analyze_email(
     domain = {**domain, **domain_intelligence}
     url_lookalikes = _url_lookalikes(parsed.urls)
     intent = analyze_email_intent(parsed.subject or "", parsed.plain_text_body or parsed.html_body or "")
+    ml_body = parsed.plain_text_body or _clean_html(parsed.html_body or "")
+    ml_result = analyze_content(parsed.subject, ml_body)
+    sender_identity = analyze_sender_identity(parsed.from_, [*parsed.to, *parsed.cc])
     relay_hops = [_relay_hop(hop.model_dump(mode="json"), enrich_hops) for hop in hop_trace.hops]
     anomaly_ids = {finding.id for finding in authentication.anomalies}
     wire_transfer_indicators = [match["phrase"] for match in intent["matched_indicators"] if match["category"] == "financial_fraud"]
+    verification_suppression = any(
+        match["phrase"].lower() in {"cannot take any calls", "cannot take calls", "do not call"}
+        for match in intent["matched_indicators"] if match["category"] == "authority_fraud"
+    )
     flags = {
         "lookalike_domain": domain["is_impersonation_suspected"],
         "lookalike_details": domain,
@@ -60,17 +69,32 @@ def analyze_email(
         "has_deceptive_url_host": bool(url_lookalikes),
         "wire_transfer_keywords": wire_transfer_indicators,
         "has_wire_transfer_indicator": bool(wire_transfer_indicators),
+        "financial_request_language": "financial_fraud" in intent["detected_intents"],
+        "verification_suppression_language": verification_suppression,
+        "external_authority_impersonation": sender_identity["sender_identity_mismatch"],
+        "sensitive_recipient_targeted": bool(sender_identity["sensitive_recipient_roles"]),
+        "sender_identity_detail": sender_identity["detail"] or "No configured sender-role mismatch was detected.",
+        "date_weekday_mismatch": bool(parsed.header_anomalies),
+        "date_weekday_mismatch_details": [
+            f"{item['field']} says {item['declared_weekday']} but {item['date']} is {item['actual_weekday']}"
+            for item in parsed.header_anomalies
+        ],
         "mismatched_return_path": "return_path_misaligned" in anomaly_ids,
         "reply_to_mismatch": "reply_to_mismatch" in anomaly_ids,
         "missing_message_id": "missing_message_id" in anomaly_ids,
         "parse_warnings": parsed.parse_warnings,
+        "ml_phishing_prediction": ml_result.get("prediction", "unavailable"),
+        "ml_phishing_probability": ml_result.get("phishing_probability"),
     }
     risk_score = score_email_risk(
         authentication={"spf": authentication.spf.result, "dkim": authentication.dkim.result, "dmarc": authentication.dmarc.result},
         domain=domain,
-        headers={"reply_to_mismatch": flags["reply_to_mismatch"], "has_message_id": parsed.message_id is not None},
+        headers={"reply_to_mismatch": flags["reply_to_mismatch"], "has_message_id": parsed.message_id is not None,
+                 "date_weekday_mismatch": flags["date_weekday_mismatch"]},
         content=intent,
         urls={"has_ip_based_url": _has_ip_based_url(parsed.urls), "has_deceptive_url_host": bool(url_lookalikes)},
+        identity=sender_identity,
+        ml_content_analysis=ml_result,
     )
     return {
         "evidence": {
@@ -90,9 +114,21 @@ def analyze_email(
         "suspicious_flags": flags,
         "domain_intelligence": domain_intelligence,
         "content_intent": intent,
+        "sender_identity_analysis": sender_identity,
+        "header_anomalies": parsed.header_anomalies,
+        "ml_content_analysis": ml_result,
         "urls": parsed.urls,
         "risk_score": risk_score,
     }
+
+
+def _clean_html(value: str) -> str:
+    """Strip markup for ML fallback while leaving forensic parsed HTML untouched."""
+    import re
+    from html import unescape
+
+    value = re.sub(r"(?is)<(script|style)\b[^>]*>.*?</\1\s*>", " ", value)
+    return re.sub(r"\s+", " ", unescape(re.sub(r"(?s)<[^>]+>", " ", value))).strip()
 
 
 def _relay_hop(hop: dict[str, Any], enrich_hops: bool) -> dict[str, Any]:

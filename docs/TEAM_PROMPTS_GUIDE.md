@@ -1,6 +1,6 @@
 # Team YAPTAG — AI Agent Master Guide & Prompts for SIH 2026 (PS: SIH26106)
 
-This document contains the **Universal Master Prompt** that establishes context for any LLM/AI coding assistant (ChatGPT, Claude, Gemini, Cursor, Copilot), followed by **Module-Specific Tailored Prompts** for each team member.
+This is a historical planning document containing prompts written during early project development. Its branch assignments, architecture, and task descriptions may be stale; use the repository README and current source code as the source of truth for implemented behavior. Review prompts before reusing them.
 
 ---
 
@@ -18,7 +18,7 @@ PROJECT DETAILS:
 - Organization: All India Council for Technical Education (AICTE)
 - Category: Software | Theme: Blockchain & Cybersecurity
 - Project Name: AegisMail (AI-Powered Email Threat Forensics & Infrastructure Intelligence Platform)
-- Target Deadline: Internal College Evaluation & Live Prototype Demo on September 8, 2026.
+- Original internal evaluation target: September 8, 2026 (past; retained as project history).
 - GitHub Repository: https://github.com/Y45h026/SIH26106-AegisMail.git
 
 WHAT THIS PROJECT IS (AND IS NOT):
@@ -29,7 +29,7 @@ WHAT THIS PROJECT IS (AND IS NOT):
 KEY ARCHITECTURAL CAVEAT:
 We explicitly DO NOT claim to identify the physical human attacker behind the keyboard. Malicious actors use VPNs, proxies, compromised servers, and botnets. We strictly perform "Infrastructure attribution and investigative intelligence."
 
-PLANNED DEMO PROTOTYPE WORKFLOW:
+PLANNED WORKFLOW (not every item below is implemented; see README and source):
 1. User uploads a raw .eml file.
 2. The system computes SHA-256 / SHA-1 hashes (ISO/IEC 27037 chain-of-custody).
 3. The parser extracts RFC 822 / MIME headers, body, URLs, and Received: hops.
@@ -41,7 +41,7 @@ PLANNED DEMO PROTOTYPE WORKFLOW:
 
 TECH STACK:
 - Backend: Python 3.11+, FastAPI, Pydantic, dnspython, dkimpy, python-whois, reportlab, networkx.
-- Frontend: Streamlit (or React + Leaflet/Cytoscape) for high-speed, interactive demo UI.
+- Frontend: Streamlit dashboard with a relay path map (the earlier React/Leaflet/Cytoscape alternatives were plans).
 - Architecture: Modular, clean Python functions returning strictly-typed dictionaries/Pydantic models.
 ================================================================================
 ```

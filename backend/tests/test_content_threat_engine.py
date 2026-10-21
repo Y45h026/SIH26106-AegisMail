@@ -37,6 +37,17 @@ class IntentTests(unittest.TestCase):
     def test_benign_content_scores_zero(self) -> None:
         self.assertEqual(analyze_email_intent("Weekly update", "The meeting is next Tuesday.")["urgency_deception_score"], 0.0)
 
+    def test_gift_card_sample_phrases_form_a_high_risk_bec_pattern(self) -> None:
+        result = analyze_email_intent(
+            "URGENT: Wire Transfer Required",
+            "Are you at your desk? I am tied up in a board meeting and cannot take any calls. "
+            "Process an immediate wire transfer for a new vendor to secure our contract. "
+            "This needs to be done in the next 30 minutes.",
+        )
+        self.assertTrue(result["is_high_risk_bec"])
+        matched = {item["phrase"].lower() for item in result["matched_indicators"]}
+        self.assertTrue({"wire transfer", "new vendor", "board meeting", "cannot take any calls"} <= matched)
+
 
 class RiskEngineTests(unittest.TestCase):
     def test_all_signals_are_explained_and_bounded(self) -> None:
@@ -52,7 +63,7 @@ class RiskEngineTests(unittest.TestCase):
         self.assertEqual(result["factor_count"], 8)
 
     def test_category_boundaries(self) -> None:
-        self.assertEqual(score_email_risk(domain={"age_days": 10})["category"], "Legitimate")
+        self.assertEqual(score_email_risk(domain={"age_days": 10})["category"], "Low Observed Risk")
         self.assertEqual(score_email_risk(authentication={"dmarc": "fail"}, domain={"age_days": 10})["category"], "Suspicious")
 
     def test_safe_email_stays_below_green_threshold(self) -> None:
@@ -65,7 +76,7 @@ class RiskEngineTests(unittest.TestCase):
         )
         self.assertLess(result["score"], 25)
         self.assertEqual(result["color"], "green")
-        self.assertTrue(result["is_safe"])
+        self.assertTrue(result["is_low_observed_risk"])
 
     def test_correlated_phishing_signals_cross_red_threshold(self) -> None:
         result = score_email_risk(
