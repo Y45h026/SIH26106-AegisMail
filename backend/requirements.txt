@@ -5,7 +5,7 @@ dnspython>=2.6.0
 dkimpy>=1.1.5
 python-whois>=0.9.4
 requests>=2.31.0
-scikit-learn>=1.4.0
+scikit-learn==1.9.0
 networkx>=3.2.1
 reportlab>=4.1.0
 python-multipart>=0.0.9
