@@ -54,6 +54,7 @@ backend/training/*.csv
 backend/training/training_report.json
 backend/data/dataset_manifest.json
 backend/models/*.joblib
+!backend/models/phishing_text_classifier.joblib
 backend/models/*.pkl
 backend/models/*.pickle
 backend/models/*.onnx

@@ -9,7 +9,7 @@ AegisMail is an email forensics prototype for reviewing `.eml` evidence. It comb
 - Reconstructs the `Received` relay path and calculates an explainable composite risk score.
 - Optionally enriches public relay IPs and sender domains with third-party GeoIP/ISP and registration-age lookups. These network lookups are opt-in.
 - Provides a Streamlit dashboard with a relay map and downloadable forensic PDF report.
-- Can use a locally trained TF-IDF and Logistic Regression content classifier. The model and training data are local artifacts and are not included in this repository.
+- Includes a TF-IDF and Logistic Regression content classifier at `backend/models/phishing_text_classifier.joblib`. Training data and generated reports remain local and are not included.
 
 ## Repository layout
 
@@ -67,7 +67,7 @@ The API accepts `.eml` uploads at `POST /api/v1/analyze` (maximum 25 MiB). Optio
 
 ## Optional local ML classifier
 
-Follow the data and licensing notes in [backend/data/README.md](backend/data/README.md). Train from the individual source CSVs with `backend/training/train_phishing_classifier.py`; the root `.gitignore` excludes the local dataset, generated manifest/report, and trained model. The classifier uses subject and body text only and complements the forensic checks. It can be unavailable when no local model has been trained.
+The checked-in model was trained from individual source CSVs described in [backend/data/README.md](backend/data/README.md). The training script is `backend/training/train_phishing_classifier.py`; local datasets, generated manifests, and reports remain excluded by `.gitignore`. The model uses subject and body text only and complements the forensic checks. See [backend/models/README.md](backend/models/README.md) for provenance, licensing, integrity, and compatibility notes.
 
 ## Development
 
